@@ -1,13 +1,15 @@
 mod chat;
 mod metrics;
 mod nbt;
+mod net;
 mod protocol;
 mod session;
 
 fn main() {
     println!("AstraCraft — Minecraft Java Edition 1.21.8 client foundation");
     println!("Protocol target: {}", session::PROTOCOL_VERSION);
-    println!("Status: protocol primitives and parsers; networking/rendering are not wired yet.");
+    println!("Implemented: VarInt framing, bounded TCP packet transport, session state machine, NBT/chat helpers.");
+    println!("Not yet implemented: compression/encryption negotiation, full login/configuration flow, GUI and 3D rendering.");
 }
 
 #[cfg(test)]
