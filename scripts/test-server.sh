@@ -4,7 +4,7 @@ set -uo pipefail
 HOST="${ASTRACRAFT_TEST_HOST:-15.235.28.64}"
 PORT="${ASTRACRAFT_TEST_PORT:-3020}"
 TARGET="${HOST}:${PORT}"
-API_URL="${ASTRACRAFT_STATUS_API:-https://api.imlazy.ink/mcapi/?name=Minecraft%20%E6%9C%8D%E5%8A%A1%E5%99%A8&host=15.235.28.64%3A3020&type=json&getmotd=%0a%0a&getbg=1.jpg}"
+API_URL="${ASTRACRAFT_STATUS_API:-https://api.imlazy.ink/mcapi/?name=Minecraft%20%E6%9C%8D%E5%8A%A1%E5%99%A8&host=${HOST}%3A${PORT}&type=json&getmotd=%0a%0a&getbg=1.jpg}"
 
 echo "== AstraCraft server connectivity test =="
 echo "Target: ${TARGET}"
