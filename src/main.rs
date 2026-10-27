@@ -1,5 +1,6 @@
 mod chat;
 mod compression;
+mod handshake;
 mod metrics;
 mod nbt;
 mod net;
