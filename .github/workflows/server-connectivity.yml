@@ -1,0 +1,61 @@
+name: Minecraft Server Connectivity
+
+on:
+  workflow_dispatch:
+    inputs:
+      host:
+        description: Minecraft Java server host
+        required: true
+        default: "15.235.28.64"
+        type: string
+      port:
+        description: Minecraft Java server TCP port
+        required: true
+        default: "3020"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  connectivity:
+    name: Test server with AstraCraft
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build AstraCraft
+        run: cargo build --release
+      - name: Query external status API
+        continue-on-error: true
+        env:
+          HOST: ${{ inputs.host }}
+          PORT: ${{ inputs.port }}
+        run: |
+          URL="https://api.imlazy.ink/mcapi/?name=Minecraft%20%E6%9C%8D%E5%8A%A1%E5%99%A8&host=${HOST}%3A${PORT}&type=json&getmotd=%0a%0a&getbg=1.jpg"
+          curl --fail --silent --show-error --location --max-time 12 "$URL" | tee status-api.json
+      - name: Test using AstraCraft protocol ping
+        id: astracraft_ping
+        continue-on-error: true
+        env:
+          HOST: ${{ inputs.host }}
+          PORT: ${{ inputs.port }}
+        run: ./target/release/astracraft ping "${HOST}:${PORT}"
+      - name: Report result
+        if: always()
+        env:
+          PING_OUTCOME: ${{ steps.astracraft_ping.outcome }}
+          HOST: ${{ inputs.host }}
+          PORT: ${{ inputs.port }}
+        run: |
+          {
+            echo "## AstraCraft server connectivity"
+            echo
+            echo "- Target: `${HOST}:${PORT}`"
+            echo "- AstraCraft protocol ping step: **${PING_OUTCOME}**"
+            if [ "${PING_OUTCOME}" = "success" ]; then
+              echo "- Result: AstraCraft received and parsed a Minecraft status response."
+            else
+              echo "- Result: AstraCraft could not complete the status ping. Check the step logs; possible causes include a closed/refused port, an offline server, or network filtering."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
