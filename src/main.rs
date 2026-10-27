@@ -6,6 +6,7 @@ mod nbt;
 mod net;
 mod protocol;
 mod session;
+mod server_status;
 
 fn main() {
     println!("AstraCraft — Minecraft Java Edition 1.21.8 client foundation");
