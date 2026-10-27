@@ -7,7 +7,6 @@ use md5::{Digest, Md5};
 use crate::handshake::{self, NextState};
 use crate::net::MinecraftConnection;
 use crate::protocol::{read_string, read_varint, write_string, write_varint};
-use crate::session::PROTOCOL_VERSION;
 
 fn offline_uuid(username: &str) -> [u8; 16] {
     let mut hasher = Md5::new();
@@ -106,7 +105,8 @@ pub fn connect_offline(host: &str, port: u16, username: &str) -> Result<(), Stri
                 break;
             }
             0x03 => {
-                let threshold = read_varint(&packet, &mut { cursor }).map_err(|e| e.to_string())?;
+                let mut c = cursor;
+                let threshold = read_varint(&packet, &mut c).map_err(|e| e.to_string())?;
                 if threshold < 0 { return Err(format!("server sent invalid compression threshold {threshold}")); }
                 conn.set_compression(threshold as usize);
                 println!("Negotiated packet compression threshold: {threshold} bytes");
