@@ -2,6 +2,7 @@ mod chat;
 mod compression;
 mod handshake;
 mod metrics;
+mod ping;
 mod nbt;
 mod net;
 mod protocol;
