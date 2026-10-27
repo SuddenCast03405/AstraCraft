@@ -32,7 +32,7 @@ fn main() {
                 eprintln!("Invalid TCP port: {port}");
                 std::process::exit(2);
             };
-            if let Err(error) = login::connect_offline(host.trim_matches(['[', ']'), port, &username) {
+            if let Err(error) = login::connect_offline(host.trim_matches(['[', ']']), port, &username) {
                 eprintln!("Login failed: {error}");
                 std::process::exit(1);
             }
