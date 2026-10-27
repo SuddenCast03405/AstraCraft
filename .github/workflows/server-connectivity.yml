@@ -6,6 +6,8 @@ on:
     paths:
       - '.github/workflows/server-connectivity.yml'
       - 'scripts/test-server.sh'
+      - 'Cargo.toml'
+      - 'src/**'
   workflow_dispatch:
     inputs:
       host:
@@ -46,10 +48,18 @@ jobs:
           HOST: ${{ inputs.host || '15.235.28.64' }}
           PORT: ${{ inputs.port || '3020' }}
         run: ./target/release/astracraft ping "${HOST}:${PORT}"
+      - name: Probe offline-mode login
+        id: offline_login
+        continue-on-error: true
+        env:
+          HOST: ${{ inputs.host || '15.235.28.64' }}
+          PORT: ${{ inputs.port || '3020' }}
+        run: ./target/release/astracraft login "${HOST}:${PORT}" AstraCraft
       - name: Report result
         if: always()
         env:
           PING_OUTCOME: ${{ steps.astracraft_ping.outcome }}
+          LOGIN_OUTCOME: ${{ steps.offline_login.outcome }}
           HOST: ${{ inputs.host || '15.235.28.64' }}
           PORT: ${{ inputs.port || '3020' }}
         run: |
@@ -58,6 +68,12 @@ jobs:
             echo
             echo "- Target: `${HOST}:${PORT}`"
             echo "- AstraCraft protocol ping step: **${PING_OUTCOME}**"
+            echo "- Offline-mode login probe: **${LOGIN_OUTCOME}**"
+            if [ "${LOGIN_OUTCOME}" = "success" ]; then
+              echo "- Login result: reached the end of Configuration and acknowledged entry into Play state."
+            else
+              echo "- Login result: not completed. Inspect probe logs; the server may require online authentication or the configuration protocol may need additional support."
+            fi
             if [ "${PING_OUTCOME}" = "success" ]; then
               echo "- Result: AstraCraft received and parsed a Minecraft status response."
             else
