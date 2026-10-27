@@ -34,8 +34,8 @@ jobs:
       - name: Query external status API
         continue-on-error: true
         env:
-          HOST: ${{ inputs.host }}
-          PORT: ${{ inputs.port }}
+          HOST: ${{ inputs.host || '15.235.28.64' }}
+          PORT: ${{ inputs.port || '3020' }}
         run: |
           URL="https://api.imlazy.ink/mcapi/?name=Minecraft%20%E6%9C%8D%E5%8A%A1%E5%99%A8&host=${HOST}%3A${PORT}&type=json&getmotd=%0a%0a&getbg=1.jpg"
           curl --fail --silent --show-error --location --max-time 12 "$URL" | tee status-api.json
@@ -43,15 +43,15 @@ jobs:
         id: astracraft_ping
         continue-on-error: true
         env:
-          HOST: ${{ inputs.host }}
-          PORT: ${{ inputs.port }}
+          HOST: ${{ inputs.host || '15.235.28.64' }}
+          PORT: ${{ inputs.port || '3020' }}
         run: ./target/release/astracraft ping "${HOST}:${PORT}"
       - name: Report result
         if: always()
         env:
           PING_OUTCOME: ${{ steps.astracraft_ping.outcome }}
-          HOST: ${{ inputs.host }}
-          PORT: ${{ inputs.port }}
+          HOST: ${{ inputs.host || '15.235.28.64' }}
+          PORT: ${{ inputs.port || '3020' }}
         run: |
           {
             echo "## AstraCraft server connectivity"
