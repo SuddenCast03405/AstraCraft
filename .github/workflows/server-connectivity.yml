@@ -1,6 +1,11 @@
 name: Minecraft Server Connectivity
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/server-connectivity.yml'
+      - 'scripts/test-server.sh'
   workflow_dispatch:
     inputs:
       host:
