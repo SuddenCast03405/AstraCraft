@@ -2,18 +2,54 @@ mod chat;
 mod compression;
 mod handshake;
 mod metrics;
-mod ping;
 mod nbt;
 mod net;
+mod ping;
 mod protocol;
-mod session;
 mod server_status;
+mod session;
+
+use std::time::Duration;
 
 fn main() {
-    println!("AstraCraft — Minecraft Java Edition 1.21.8 client foundation");
-    println!("Protocol target: {}", session::PROTOCOL_VERSION);
-    println!("Implemented: VarInt framing, bounded TCP packet transport, session state machine, NBT/chat helpers.");
-    println!("Not yet implemented: compression/encryption negotiation, full login/configuration flow, GUI and 3D rendering.");
+    let mut args = std::env::args().skip(1);
+    match args.next().as_deref() {
+        Some("ping") => {
+            let Some(target) = args.next() else {
+                eprintln!("Usage: astracraft ping <host:port>");
+                std::process::exit(2);
+            };
+            let Some((host, port)) = target.rsplit_once(':') else {
+                eprintln!("Invalid target. Expected host:port (IPv6 must be bracketed).");
+                std::process::exit(2);
+            };
+            let Ok(port) = port.parse::<u16>() else {
+                eprintln!("Invalid TCP port: {port}");
+                std::process::exit(2);
+            };
+            match ping::ping_server(host.trim_matches(['[', ']']), port, Duration::from_secs(5)) {
+                Ok(result) => {
+                    println!("Server: {host}:{port}");
+                    println!("Version: {}", result.status.version_name.as_deref().unwrap_or("unknown"));
+                    println!("Protocol: {}", result.status.protocol.map(|n| n.to_string()).unwrap_or_else(|| "unknown".into()));
+                    println!("Players: {}/{}", result.status.online_players.map(|n| n.to_string()).unwrap_or_else(|| "?".into()), result.status.max_players.map(|n| n.to_string()).unwrap_or_else(|| "?".into()));
+                    println!("MOTD: {}", result.status.description);
+                    println!("Latency: {} ms", result.latency.as_secs_f64() * 1000.0);
+                }
+                Err(error) => {
+                    eprintln!("Ping failed: {error}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        _ => {
+            println!("AstraCraft — Minecraft Java Edition 1.21.8 client foundation");
+            println!("Protocol target: {}", session::PROTOCOL_VERSION);
+            println!("Usage: astracraft ping <host:port>");
+            println!("Implemented: TCP framing, zlib compression primitives, handshake/status packet encoding and server ping.");
+            println!("Not yet implemented: login encryption/authentication, full configuration/play protocol, GUI and 3D rendering.");
+        }
+    }
 }
 
 #[cfg(test)]
