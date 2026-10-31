@@ -160,8 +160,7 @@ pub fn connect_offline(host: &str, port: u16, username: &str) -> Result<(), Stri
                 write_varint(&mut ack, 0x03);
                 conn.write_packet(&ack).map_err(|e| e.to_string())?;
                 println!("Configuration finished. Server accepted the client into Play state.");
-                println!("Note: world/chunk decoding, gameplay packets, and rendering are not implemented yet.");
-                return Ok(());
+                return play_loop(&mut conn);
             }
             0x04 => { // Keep Alive: echo the 64-bit ID.
                 if packet.len() < cursor + 8 { return Err("truncated configuration Keep Alive".into()); }
