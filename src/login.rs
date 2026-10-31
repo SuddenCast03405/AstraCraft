@@ -74,6 +74,8 @@ fn play_loop(conn: &mut MinecraftConnection) -> Result<(), String> {
     const CLIENTBOUND_DISCONNECT: i32 = 0x1c;
     const CLIENTBOUND_KEEP_ALIVE: i32 = 0x26;
     const CLIENTBOUND_PING: i32 = 0x36;
+    const CLIENTBOUND_JOIN_GAME: i32 = 0x2b;
+    const CLIENTBOUND_PLAYER_POSITION: i32 = 0x41;
     const SERVERBOUND_KEEP_ALIVE: i32 = 0x1b;
     const SERVERBOUND_PONG: i32 = 0x2c;
 
@@ -100,6 +102,16 @@ fn play_loop(conn: &mut MinecraftConnection) -> Result<(), String> {
                 conn.write_packet(&response).map_err(|e| e.to_string())?;
                 keep_alives = keep_alives.saturating_add(1);
                 println!("Keep-alive #{keep_alives} acknowledged.");
+            }
+            CLIENTBOUND_JOIN_GAME => {
+                let join = crate::play::decode_join_game(&packet[cursor..])?;
+                println!("Joined world {} (dimension registry ID {}, entity {}, view distance {}).", join.dimension_name, join.dimension_id, join.entity_id, join.view_distance);
+                println!("World list: {}; game mode: {}.", join.worlds.join(", "), join.game_mode);
+            }
+            CLIENTBOUND_PLAYER_POSITION => {
+                let teleport = crate::play::decode_player_teleport(&packet[cursor..])?;
+                conn.write_packet(&crate::play::teleport_confirm_packet(teleport.teleport_id)).map_err(|e| e.to_string())?;
+                println!("Position synchronized: ({:.2}, {:.2}, {:.2}), yaw {:.1}, pitch {:.1}; teleport {} confirmed.", teleport.x, teleport.y, teleport.z, teleport.yaw, teleport.pitch, teleport.teleport_id);
             }
             CLIENTBOUND_PING => {
                 if packet.len() != cursor + 4 { return Err(format!("invalid Play Ping length: expected 4 bytes, got {}", packet.len().saturating_sub(cursor))); }
