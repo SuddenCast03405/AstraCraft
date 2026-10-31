@@ -28,3 +28,8 @@ The connectivity workflow sets `ASTRACRAFT_LOGIN_PROBE=1` so CI verifies the Log
 - Offline-mode support is not a way to bypass online authentication; servers decide which authentication modes they accept.
 
 Target protocol: Java Edition 1.21.8, protocol version 772.
+
+
+### Play packet decoding
+
+The protocol 772 Play loop now decodes the Join Game packet (world list, dimension registry key, game mode and view distances) and Synchronize Player Position packets. Position teleports are acknowledged with the matching serverbound Teleport Confirm packet. Chunk Data, registry-driven dimension height resolution, lighting, entities, input and rendering remain future work; this is still a networking/client foundation rather than a playable renderer.
