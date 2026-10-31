@@ -12,7 +12,7 @@ pub struct Dimension {
 }
 impl Dimension {
     pub fn new(min_y: i32, height: u32) -> Result<Self, WorldError> {
-        if height == 0 || height % 16 != 0 || min_y.rem_euclid(16) != 0 {
+        if height == 0 || height > 60_000_000 || height % 16 != 0 || min_y.rem_euclid(16) != 0 {
             return Err(WorldError::InvalidDimension { min_y, height });
         }
         let max_y = min_y.checked_add(height as i32).ok_or(WorldError::CoordinateOverflow)?;
@@ -27,7 +27,7 @@ impl Dimension {
     pub fn section_count(self) -> usize { self.height as usize / 16 }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct ChunkPos { pub x: i32, pub z: i32 }
 impl ChunkPos {
     pub fn from_block(x: i32, z: i32) -> Self {
