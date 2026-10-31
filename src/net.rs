@@ -64,6 +64,12 @@ impl MinecraftConnection {
 
     pub fn set_max_frame_length(&mut self, max: usize) { self.max_frame_length = max.min(MAX_FRAME_LENGTH); }
 
+    /// Changes the socket read timeout without changing the write timeout.
+    pub fn set_read_timeout(&self, timeout: Option<Duration>) -> Result<(), NetworkError> {
+        self.stream.set_read_timeout(timeout)?;
+        Ok(())
+    }
+
     /// Enables compression for packets after the Set Compression packet has been received.
     pub fn set_compression(&mut self, threshold: usize) {
         self.compression = Some(PacketCompression::new(threshold));
