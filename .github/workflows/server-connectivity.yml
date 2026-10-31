@@ -54,7 +54,6 @@ jobs:
         env:
           HOST: ${{ inputs.host || '15.235.28.64' }}
           PORT: ${{ inputs.port || '3020' }}
-        env:
           ASTRACRAFT_LOGIN_PROBE: "1"
         run: ./target/release/astracraft login "${HOST}:${PORT}" AstraCraft
       - name: Report result
