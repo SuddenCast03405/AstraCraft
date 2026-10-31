@@ -7,6 +7,7 @@ mod nbt;
 mod net;
 mod ping;
 mod protocol;
+mod play;
 mod server_status;
 mod session;
 mod world;
