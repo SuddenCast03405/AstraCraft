@@ -9,6 +9,7 @@ mod ping;
 mod protocol;
 mod server_status;
 mod session;
+mod world;
 
 use std::time::Duration;
 
@@ -71,7 +72,8 @@ fn main() {
             println!("Usage: astracraft ping <host:port>");
             println!("       astracraft login <host:port> <username>");
             println!("Implemented: status ping, offline-mode login, zlib negotiation, configuration handshake, persistent Play loop and keep-alive/ping replies.");
-            println!("Not yet implemented: online account authentication, Play packet decoding, world/chunk state, input, GUI and 3D rendering.");
+            println!("World model: bounded chunks, block sections, dimension bounds and player pose.");
+            println!("Not yet implemented: online account authentication, Play packet decoding, chunk packet ingestion, input, GUI and 3D rendering.");
         }
     }
 }
