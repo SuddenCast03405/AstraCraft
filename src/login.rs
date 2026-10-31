@@ -69,6 +69,52 @@ fn send_client_information(conn: &mut MinecraftConnection) -> Result<(), String>
     conn.write_packet(&p).map_err(|e| e.to_string())
 }
 
+/// Processes the Java 1.21.8 (protocol 772) Play state until the server disconnects.
+fn play_loop(conn: &mut MinecraftConnection) -> Result<(), String> {
+    const CLIENTBOUND_DISCONNECT: i32 = 0x1c;
+    const CLIENTBOUND_KEEP_ALIVE: i32 = 0x26;
+    const CLIENTBOUND_PING: i32 = 0x36;
+    const SERVERBOUND_KEEP_ALIVE: i32 = 0x1b;
+    const SERVERBOUND_PONG: i32 = 0x2c;
+
+    conn.set_read_timeout(Some(Duration::from_secs(30))).map_err(|e| e.to_string())?;
+    println!("Play session active. Waiting for server packets (Ctrl+C to stop).");
+    let mut received = 0u64;
+    let mut keep_alives = 0u64;
+    let mut unknown_ids = std::collections::BTreeSet::new();
+    loop {
+        let packet = conn.read_packet().map_err(|e| format!("Play state read failed after {received} packets: {e}"))?;
+        let (id, cursor) = packet_id(&packet)?;
+        received = received.saturating_add(1);
+        match id {
+            CLIENTBOUND_DISCONNECT => {
+                println!("Server disconnected: {}", disconnect_reason(&packet, cursor));
+                println!("Play session ended after {received} packets; keep-alive replies: {keep_alives}.");
+                return Ok(());
+            }
+            CLIENTBOUND_KEEP_ALIVE => {
+                if packet.len() != cursor + 8 { return Err(format!("invalid Play Keep Alive length: expected 8 bytes, got {}", packet.len().saturating_sub(cursor))); }
+                let mut response = Vec::with_capacity(9);
+                write_varint(&mut response, SERVERBOUND_KEEP_ALIVE);
+                response.extend_from_slice(&packet[cursor..cursor + 8]);
+                conn.write_packet(&response).map_err(|e| e.to_string())?;
+                keep_alives = keep_alives.saturating_add(1);
+                println!("Keep-alive #{keep_alives} acknowledged.");
+            }
+            CLIENTBOUND_PING => {
+                if packet.len() != cursor + 4 { return Err(format!("invalid Play Ping length: expected 4 bytes, got {}", packet.len().saturating_sub(cursor))); }
+                let mut response = Vec::with_capacity(5);
+                write_varint(&mut response, SERVERBOUND_PONG);
+                response.extend_from_slice(&packet[cursor..cursor + 4]);
+                conn.write_packet(&response).map_err(|e| e.to_string())?;
+            }
+            other => if unknown_ids.insert(other) {
+                println!("Play packet 0x{other:02x} received ({} payload bytes; decoder pending).", packet.len().saturating_sub(cursor));
+            }
+        }
+    }
+}
+
 /// Connects using offline-mode identity, negotiates login compression and processes
 /// configuration packets until the server finishes configuration or rejects the client.
 pub fn connect_offline(host: &str, port: u16, username: &str) -> Result<(), String> {
@@ -160,6 +206,10 @@ pub fn connect_offline(host: &str, port: u16, username: &str) -> Result<(), Stri
                 write_varint(&mut ack, 0x03);
                 conn.write_packet(&ack).map_err(|e| e.to_string())?;
                 println!("Configuration finished. Server accepted the client into Play state.");
+                if std::env::var_os("ASTRACRAFT_LOGIN_PROBE").is_some() {
+                    println!("Probe mode: closing after successful Play-state transition.");
+                    return Ok(());
+                }
                 return play_loop(&mut conn);
             }
             0x04 => { // Keep Alive: echo the 64-bit ID.
