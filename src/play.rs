@@ -101,7 +101,12 @@ pub fn decode_chunk_data(payload: &[u8], dimension: Dimension) -> Result<Decoded
         let blocks = decode_paletted_values(section_bytes, &mut sc, SECTION_VOLUME, 8)?;
         // Biome palette contains 4x4x4 values. It is validated and consumed, but not yet stored.
         let _biomes = decode_paletted_values(section_bytes, &mut sc, 64, 3)?;
+        let actual_non_air = blocks.iter().filter(|state| **state != 0).count();
+        if actual_non_air != non_air as usize {
+            return Err(format!("section non-air count mismatch: header {non_air}, decoded {actual_non_air}"));
+        }
         let section_y = dimension.min_section_y() + section_index as i32;
+        if actual_non_air == 0 { continue; } // Keep all-air sections sparse.
         let section = chunk.section_mut(section_y);
         for (index, state) in blocks.into_iter().enumerate() {
             let x = (index % 16) as u8;
