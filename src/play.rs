@@ -227,6 +227,36 @@ pub fn decode_player_teleport(p: &[u8]) -> Result<PlayerTeleport, String> {
     Ok(PlayerTeleport { teleport_id, x, y, z, yaw, pitch, relative_flags })
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Respawn {
+    pub dimension_id: i32,
+    pub dimension_name: String,
+    pub portal_cooldown: i32,
+    pub sea_level: i32,
+    pub copy_metadata: u8,
+}
+
+/// Decode Respawn (clientbound Play packet 0x4b), including its optional death location.
+pub fn decode_respawn(p: &[u8]) -> Result<Respawn, String> {
+    let mut c = 0;
+    let dimension_id = varint(p, &mut c)?;
+    let dimension_name = string(p, &mut c)?;
+    let _hashed_seed = take::<8>(p, &mut c, "respawn hashed seed")?;
+    let _game_mode = take::<1>(p, &mut c, "respawn game mode")?;
+    let _previous_game_mode = take::<1>(p, &mut c, "respawn previous game mode")?;
+    let _debug = boolean(p, &mut c, "respawn debug")?;
+    let _flat = boolean(p, &mut c, "respawn flat")?;
+    if boolean(p, &mut c, "respawn death location presence")? {
+        let _death_dimension = string(p, &mut c)?;
+        let _death_position = take::<8>(p, &mut c, "respawn death position")?;
+    }
+    let portal_cooldown = varint(p, &mut c)?;
+    let sea_level = varint(p, &mut c)?;
+    let copy_metadata = take::<1>(p, &mut c, "respawn copy metadata")?[0];
+    if c != p.len() { return Err(format!("Respawn has {} trailing bytes", p.len() - c)); }
+    Ok(Respawn { dimension_id, dimension_name, portal_cooldown, sea_level, copy_metadata })
+}
+
 pub fn teleport_confirm_packet(teleport_id: i32) -> Vec<u8> {
     let mut p = Vec::with_capacity(6);
     write_varint(&mut p, 0x00); // Serverbound Teleport Confirm
@@ -299,6 +329,26 @@ mod tests {
         assert_eq!(got.game_mode, 0);
         assert!(got.flat);
         assert!(got.secure_chat);
+    }
+
+    #[test]
+    fn decodes_respawn_dimension_and_optional_death_location() {
+        let mut p = Vec::new();
+        write_varint(&mut p, 2);
+        write_string(&mut p, "minecraft:the_nether").unwrap();
+        p.extend_from_slice(&[0; 8]);
+        p.extend_from_slice(&[0, 255, 0, 1, 1]);
+        write_string(&mut p, "minecraft:overworld").unwrap();
+        p.extend_from_slice(&[0; 8]);
+        write_varint(&mut p, 20);
+        write_varint(&mut p, 32);
+        p.push(1);
+        let respawn = decode_respawn(&p).unwrap();
+        assert_eq!(respawn.dimension_id, 2);
+        assert_eq!(respawn.dimension_name, "minecraft:the_nether");
+        assert_eq!(respawn.portal_cooldown, 20);
+        assert_eq!(respawn.sea_level, 32);
+        assert_eq!(respawn.copy_metadata, 1);
     }
 
     #[test]
