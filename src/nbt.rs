@@ -75,13 +75,18 @@ impl<'a> Reader<'a> {
         })
     }
 }
-pub fn read_root(bytes: &[u8]) -> Result<NamedTag> {
+pub fn read_root_prefix(bytes: &[u8]) -> Result<(NamedTag, usize)> {
     if bytes.len() > MAX_BYTES { return Err(NbtError::TooLarge(bytes.len())); }
     let mut r=Reader { bytes, pos:0 };
     let id=r.u8()?; if id==0 || id>12 { return Err(NbtError::InvalidTag(id)); }
     let name=r.string()?; let tag=r.payload(id,0)?;
-    if r.pos != bytes.len() { return Err(NbtError::TrailingBytes(bytes.len()-r.pos)); }
-    Ok(NamedTag { name, tag })
+    let consumed = r.pos;
+    Ok((NamedTag { name, tag }, consumed))
+}
+pub fn read_root(bytes: &[u8]) -> Result<NamedTag> {
+    let (root, consumed) = read_root_prefix(bytes)?;
+    if consumed != bytes.len() { return Err(NbtError::TrailingBytes(bytes.len()-consumed)); }
+    Ok(root)
 }
 #[cfg(test)]
 mod tests {
