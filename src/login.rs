@@ -79,6 +79,7 @@ fn play_loop(conn: &mut MinecraftConnection) -> Result<(), String> {
     const CLIENTBOUND_CHUNK_DATA: i32 = 0x27;
     const CLIENTBOUND_UNLOAD_CHUNK: i32 = 0x21;
     const CLIENTBOUND_CHUNK_BATCH_FINISHED: i32 = 0x0b;
+    const CLIENTBOUND_RESPAWN: i32 = 0x4b;
     const SERVERBOUND_KEEP_ALIVE: i32 = 0x1b;
     const SERVERBOUND_PONG: i32 = 0x2c;
 
@@ -89,6 +90,7 @@ fn play_loop(conn: &mut MinecraftConnection) -> Result<(), String> {
     let mut unknown_ids = std::collections::BTreeSet::new();
     let mut world: Option<crate::world::World> = None;
     let mut chunks_received = 0u64;
+    let mut chunk_budget = 512usize;
     let mut player_loaded_sent = false;
     loop {
         let packet = conn.read_packet().map_err(|e| format!("Play state read failed after {received} packets: {e}"))?;
@@ -122,9 +124,22 @@ fn play_loop(conn: &mut MinecraftConnection) -> Result<(), String> {
                     }
                 }.map_err(|e| e.to_string())?;
                 let view = join.view_distance.clamp(2, 32) as usize;
-                let chunk_budget = ((view * 2 + 3).pow(2)).min(4096);
+                chunk_budget = ((view * 2 + 3).pow(2)).min(4096);
                 world = Some(crate::world::World::with_chunk_limit(dimension, chunk_budget));
                 println!("World chunk budget: {chunk_budget} resident chunks.");
+            }
+            CLIENTBOUND_RESPAWN => {
+                let respawn = crate::play::decode_respawn(&packet[cursor..])?;
+                let dimension = match respawn.dimension_name.as_str() {
+                    "minecraft:overworld" => crate::world::Dimension::new(-64, 384),
+                    "minecraft:the_nether" | "minecraft:the_end" => crate::world::Dimension::new(0, 256),
+                    other => {
+                        println!("Respawn in custom dimension {other}; using Overworld bounds until registry decoding is available.");
+                        crate::world::Dimension::new(-64, 384)
+                    }
+                }.map_err(|e| e.to_string())?;
+                world = Some(crate::world::World::with_chunk_limit(dimension, chunk_budget));
+                println!("Respawned into {} (dimension type {}); cleared old chunk cache.", respawn.dimension_name, respawn.dimension_id);
             }
             CLIENTBOUND_PLAYER_POSITION => {
                 let teleport = crate::play::decode_player_teleport(&packet[cursor..])?;
