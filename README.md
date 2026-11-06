@@ -4,9 +4,9 @@ A Rust-based experimental client for Minecraft Java Edition 1.21.8 (protocol 772
 
 ## Current status
 
-AstraCraft can query server status, perform offline-mode login, negotiate zlib compression, complete the Configuration state, and keep a TCP session alive in Play. The Play loop currently answers protocol 772 keep-alive and ping packets and reports other packet IDs; it does not yet decode the world or provide playable controls.
+AstraCraft can query server status, perform offline-mode login, negotiate zlib compression, complete Configuration, and maintain a Play session. The Play loop handles keep-alive/ping, Join Game, player teleports, chunk batch acknowledgements, chunk loading and chunk unloading. Decoded block states are stored in a bounded in-memory world model.
 
-Not implemented yet: Microsoft/Mojang online authentication, complete Play packet decoding, registry interpretation, chunk/world state, entity and inventory interaction, input, GUI, and GPU rendering.
+Not implemented yet: Microsoft/Mojang online authentication, full dimension-registry interpretation (custom dimensions currently use fallback bounds), block entities and lighting storage, entities, inventory interaction, input, GUI, and GPU rendering.
 
 ## Build and run
 
@@ -32,4 +32,4 @@ Target protocol: Java Edition 1.21.8, protocol version 772.
 
 ### Play packet decoding
 
-The protocol 772 Play loop now decodes the Join Game packet (world list, dimension registry key, game mode and view distances) and Synchronize Player Position packets. Position teleports are acknowledged with the matching serverbound Teleport Confirm packet. Chunk Data, registry-driven dimension height resolution, lighting, entities, input and rendering remain future work; this is still a networking/client foundation rather than a playable renderer.
+The protocol 772 Play loop now decodes the Join Game packet (world list, dimension registry key, game mode and view distances) and Synchronize Player Position packets. Position teleports are acknowledged with the matching serverbound Teleport Confirm packet. Chunk Data packet decoding now validates heightmap NBT, section lengths, block/biome palettes, packed-long counts and per-section non-air counts. Block-state IDs are imported into the world model; biome values and the remaining block-entity/light payload are not yet retained. Dimension bounds are selected for vanilla Overworld/Nether/End names; custom dimension registry decoding is still pending. This remains a networking/world-data foundation rather than a playable renderer.
