@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 
 pub const SECTION_EDGE: usize = 16;
 pub const SECTION_VOLUME: usize = SECTION_EDGE * SECTION_EDGE * SECTION_EDGE;
-pub const DEFAULT_MAX_LOADED_CHUNKS: usize = 4096;
+pub const DEFAULT_MAX_LOADED_CHUNKS: usize = 512;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Dimension {
