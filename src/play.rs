@@ -1,6 +1,122 @@
 //! Protocol 772 Play-state packet decoders for initial world entry and player teleport.
 use crate::protocol::{read_string, read_varint, write_varint};
 
+use crate::world::{Chunk, ChunkPos, Dimension, SECTION_VOLUME};
+
+const MAX_CHUNK_DATA_BYTES: usize = 2 * 1024 * 1024;
+const MAX_PALETTE_ENTRIES: usize = 4096;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecodedChunk {
+    pub chunk: Chunk,
+    /// Number of bytes consumed from the packet payload (remaining bytes contain block entities/light).
+    pub consumed: usize,
+    pub section_count: usize,
+}
+
+fn take_bytes<'a>(p: &'a [u8], c: &mut usize, n: usize, what: &'static str) -> Result<&'a [u8], String> {
+    let end = c.checked_add(n).ok_or("chunk cursor overflow")?;
+    let bytes = p.get(*c..end).ok_or_else(|| format!("truncated {what}"))?;
+    *c = end;
+    Ok(bytes)
+}
+
+fn decode_paletted_values(p: &[u8], c: &mut usize, entries: usize, indirect_max_bits: u8) -> Result<Vec<u32>, String> {
+    let bits = take::<1>(p, c, "palette bits")?[0];
+    if bits > 32 { return Err(format!("unsupported palette bit width {bits}")); }
+    let palette = if bits == 0 {
+        vec![varint(p, c)? as u32]
+    } else if bits <= indirect_max_bits {
+        let count = varint(p, c)?;
+        if count <= 0 || count as usize > MAX_PALETTE_ENTRIES {
+            return Err(format!("invalid palette length {count}"));
+        }
+        let mut values = Vec::with_capacity(count as usize);
+        for _ in 0..count {
+            let value = varint(p, c)?;
+            if value < 0 { return Err("negative palette entry".into()); }
+            values.push(value as u32);
+        }
+        values
+    } else {
+        Vec::new() // Direct/global palette: packed values are registry IDs.
+    };
+
+    let data_count = varint(p, c)?;
+    if data_count < 0 { return Err(format!("negative packed-long count {data_count}")); }
+    let data_count = data_count as usize;
+    let expected = if bits == 0 { 0 } else {
+        let per_long = 64usize / bits as usize;
+        entries.div_ceil(per_long)
+    };
+    if data_count != expected {
+        return Err(format!("packed-long count mismatch: got {data_count}, expected {expected}"));
+    }
+    if data_count > 4096 { return Err(format!("packed-long array too large: {data_count}")); }
+    let raw = take_bytes(p, c, data_count.checked_mul(8).ok_or("packed-long size overflow")?, "packed-long array")?;
+    let longs: Vec<u64> = raw.chunks_exact(8)
+        .map(|b| u64::from_be_bytes(b.try_into().expect("eight-byte chunk")))
+        .collect();
+
+    let mut decoded = Vec::with_capacity(entries);
+    if bits == 0 {
+        decoded.resize(entries, *palette.first().ok_or("missing single-value palette")?);
+        return Ok(decoded);
+    }
+    let width = bits as usize;
+    let per_long = 64 / width;
+    let mask = if bits == 32 { u32::MAX as u64 } else { (1u64 << bits) - 1 };
+    for index in 0..entries {
+        let long = longs[index / per_long];
+        let shift = (index % per_long) * width;
+        let raw_value = ((long >> shift) & mask) as u32;
+        let value = if palette.is_empty() {
+            raw_value
+        } else {
+            *palette.get(raw_value as usize).ok_or_else(|| format!("palette index {raw_value} out of range ({} entries)", palette.len()))?
+        };
+        decoded.push(value);
+    }
+    Ok(decoded)
+}
+
+/// Decode the Chunk Data packet's chunk coordinates, heightmap NBT and section byte array.
+/// Section count and vertical origin come from the active dimension registry entry.
+pub fn decode_chunk_data(payload: &[u8], dimension: Dimension) -> Result<DecodedChunk, String> {
+    let mut c = 0;
+    let x = i32::from_be_bytes(take::<4>(payload, &mut c, "chunk X")?);
+    let z = i32::from_be_bytes(take::<4>(payload, &mut c, "chunk Z")?);
+    let (_heightmaps, nbt_len) = crate::nbt::read_root_prefix(&payload[c..]).map_err(|e| format!("invalid chunk heightmaps NBT: {e:?}"))?;
+    c = c.checked_add(nbt_len).ok_or("chunk NBT cursor overflow")?;
+    let data_len = varint(payload, &mut c)?;
+    if data_len < 0 || data_len as usize > MAX_CHUNK_DATA_BYTES {
+        return Err(format!("invalid chunk section-data length {data_len}"));
+    }
+    let section_bytes = take_bytes(payload, &mut c, data_len as usize, "chunk section data")?;
+    let mut sc = 0;
+    let mut chunk = Chunk::new(ChunkPos { x, z });
+    for section_index in 0..dimension.section_count() {
+        let non_air = i16::from_be_bytes(take::<2>(section_bytes, &mut sc, "section non-air count")?);
+        if !(0..=4096).contains(&non_air) { return Err(format!("invalid section non-air count {non_air}")); }
+        let blocks = decode_paletted_values(section_bytes, &mut sc, SECTION_VOLUME, 8)?;
+        // Biome palette contains 4x4x4 values. It is validated and consumed, but not yet stored.
+        let _biomes = decode_paletted_values(section_bytes, &mut sc, 64, 3)?;
+        let section_y = dimension.min_section_y() + section_index as i32;
+        let section = chunk.section_mut(section_y);
+        for (index, state) in blocks.into_iter().enumerate() {
+            let x = (index % 16) as u8;
+            let z = ((index / 16) % 16) as u8;
+            let y = (index / 256) as u8;
+            section.set(x, y, z, state).map_err(|e| e.to_string())?;
+        }
+    }
+    if sc != section_bytes.len() {
+        return Err(format!("{} trailing bytes in chunk section data", section_bytes.len() - sc));
+    }
+    Ok(DecodedChunk { chunk, consumed: c, section_count: dimension.section_count() })
+}
+
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct JoinGame {
     pub entity_id: i32,
