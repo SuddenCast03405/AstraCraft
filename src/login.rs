@@ -125,6 +125,18 @@ fn play_loop(conn: &mut MinecraftConnection) -> Result<(), String> {
             CLIENTBOUND_PLAYER_POSITION => {
                 let teleport = crate::play::decode_player_teleport(&packet[cursor..])?;
                 conn.write_packet(&crate::play::teleport_confirm_packet(teleport.teleport_id)).map_err(|e| e.to_string())?;
+                if let Some(active) = world.as_mut() {
+                    let old = active.player;
+                    let flags = teleport.relative_flags;
+                    active.player = crate::world::PlayerPose {
+                        x: if flags & 0x01 != 0 { old.x + teleport.x } else { teleport.x },
+                        y: if flags & 0x02 != 0 { old.y + teleport.y } else { teleport.y },
+                        z: if flags & 0x04 != 0 { old.z + teleport.z } else { teleport.z },
+                        yaw: if flags & 0x08 != 0 { old.yaw + teleport.yaw } else { teleport.yaw },
+                        pitch: if flags & 0x10 != 0 { old.pitch + teleport.pitch } else { teleport.pitch },
+                        on_ground: old.on_ground,
+                    };
+                }
                 println!("Position synchronized: ({:.2}, {:.2}, {:.2}), yaw {:.1}, pitch {:.1}; teleport {} confirmed.", teleport.x, teleport.y, teleport.z, teleport.yaw, teleport.pitch, teleport.teleport_id);
             }
             CLIENTBOUND_CHUNK_DATA => {
