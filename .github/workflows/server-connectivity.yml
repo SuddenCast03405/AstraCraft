@@ -67,7 +67,7 @@ jobs:
           {
             echo "## AstraCraft server connectivity"
             echo
-            echo "- Target: `${HOST}:${PORT}`"
+            echo "- Target: \`${HOST}:${PORT}\`"
             echo "- AstraCraft protocol ping step: **${PING_OUTCOME}**"
             echo "- Offline-mode login probe: **${LOGIN_OUTCOME}**"
             if [ "${LOGIN_OUTCOME}" = "success" ]; then
