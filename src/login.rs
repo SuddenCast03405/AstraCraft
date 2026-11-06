@@ -164,7 +164,7 @@ fn play_loop(conn: &mut MinecraftConnection) -> Result<(), String> {
             }
             CLIENTBOUND_CHUNK_BATCH_FINISHED => {
                 let mut c = cursor;
-                let batch_size = read_varint(&packet, &mut c)?;
+                let batch_size = read_varint(&packet, &mut c).map_err(|e| e.to_string())?;
                 if c != packet.len() { return Err("trailing bytes in Chunk Batch Finished".into()); }
                 let mut response = Vec::with_capacity(5);
                 write_varint(&mut response, 0x0a); // Serverbound Chunk Batch Received
