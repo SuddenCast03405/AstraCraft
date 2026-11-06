@@ -24,12 +24,16 @@ fn take_bytes<'a>(p: &'a [u8], c: &mut usize, n: usize, what: &'static str) -> R
 fn decode_paletted_values(p: &[u8], c: &mut usize, entries: usize, indirect_max_bits: u8) -> Result<Vec<u32>, String> {
     let bits = take::<1>(p, c, "palette bits")?[0];
     if bits > 32 { return Err(format!("unsupported palette bit width {bits}")); }
+    let minimum_indirect_bits = if indirect_max_bits == 8 { 4 } else { 1 };
+    if bits > 0 && bits < minimum_indirect_bits {
+        return Err(format!("palette bit width {bits} is below protocol minimum {minimum_indirect_bits}"));
+    }
     let palette = if bits == 0 {
         vec![varint(p, c)? as u32]
     } else if bits <= indirect_max_bits {
         let count = varint(p, c)?;
-        if count <= 0 || count as usize > MAX_PALETTE_ENTRIES {
-            return Err(format!("invalid palette length {count}"));
+        if count <= 0 || count as usize > MAX_PALETTE_ENTRIES || count as u32 > (1u32 << bits) {
+            return Err(format!("invalid palette length {count} for {bits}-bit entries"));
         }
         let mut values = Vec::with_capacity(count as usize);
         for _ in 0..count {
