@@ -76,6 +76,9 @@ fn play_loop(conn: &mut MinecraftConnection) -> Result<(), String> {
     const CLIENTBOUND_PING: i32 = 0x36;
     const CLIENTBOUND_JOIN_GAME: i32 = 0x2b;
     const CLIENTBOUND_PLAYER_POSITION: i32 = 0x41;
+    const CLIENTBOUND_CHUNK_DATA: i32 = 0x27;
+    const CLIENTBOUND_UNLOAD_CHUNK: i32 = 0x21;
+    const CLIENTBOUND_CHUNK_BATCH_FINISHED: i32 = 0x0b;
     const SERVERBOUND_KEEP_ALIVE: i32 = 0x1b;
     const SERVERBOUND_PONG: i32 = 0x2c;
 
@@ -84,6 +87,8 @@ fn play_loop(conn: &mut MinecraftConnection) -> Result<(), String> {
     let mut received = 0u64;
     let mut keep_alives = 0u64;
     let mut unknown_ids = std::collections::BTreeSet::new();
+    let mut world: Option<crate::world::World> = None;
+    let mut chunks_received = 0u64;
     loop {
         let packet = conn.read_packet().map_err(|e| format!("Play state read failed after {received} packets: {e}"))?;
         let (id, cursor) = packet_id(&packet)?;
@@ -107,11 +112,48 @@ fn play_loop(conn: &mut MinecraftConnection) -> Result<(), String> {
                 let join = crate::play::decode_join_game(&packet[cursor..])?;
                 println!("Joined world {} (dimension registry ID {}, entity {}, view distance {}).", join.dimension_name, join.dimension_id, join.entity_id, join.view_distance);
                 println!("World list: {}; game mode: {}.", join.worlds.join(", "), join.game_mode);
+                let dimension = match join.dimension_name.as_str() {
+                    "minecraft:overworld" => crate::world::Dimension::new(-64, 384),
+                    "minecraft:the_nether" | "minecraft:the_end" => crate::world::Dimension::new(0, 256),
+                    other => {
+                        println!("Unknown/custom dimension {other}; using Overworld bounds until dimension registry decoding is implemented.");
+                        crate::world::Dimension::new(-64, 384)
+                    }
+                }.map_err(|e| e.to_string())?;
+                world = Some(crate::world::World::new(dimension));
             }
             CLIENTBOUND_PLAYER_POSITION => {
                 let teleport = crate::play::decode_player_teleport(&packet[cursor..])?;
                 conn.write_packet(&crate::play::teleport_confirm_packet(teleport.teleport_id)).map_err(|e| e.to_string())?;
                 println!("Position synchronized: ({:.2}, {:.2}, {:.2}), yaw {:.1}, pitch {:.1}; teleport {} confirmed.", teleport.x, teleport.y, teleport.z, teleport.yaw, teleport.pitch, teleport.teleport_id);
+            }
+            CLIENTBOUND_CHUNK_DATA => {
+                let active = world.as_mut().ok_or("received Chunk Data before Join Game")?;
+                let decoded = crate::play::decode_chunk_data(&packet[cursor..], active.dimension)?;
+                let pos = decoded.chunk.pos;
+                active.insert_chunk(decoded.chunk).map_err(|e| e.to_string())?;
+                chunks_received = chunks_received.saturating_add(1);
+                if chunks_received <= 8 || chunks_received % 64 == 0 {
+                    println!("Loaded chunk ({}, {}) with {} sections ({} loaded total).", pos.x, pos.z, decoded.section_count, active.loaded_chunk_count());
+                }
+            }
+            CLIENTBOUND_UNLOAD_CHUNK => {
+                if packet.len() != cursor + 8 { return Err("invalid Unload Chunk packet length".into()); }
+                let z = i32::from_be_bytes(packet[cursor..cursor + 4].try_into().unwrap());
+                let x = i32::from_be_bytes(packet[cursor + 4..cursor + 8].try_into().unwrap());
+                if let Some(active) = world.as_mut() {
+                    active.unload_chunk(crate::world::ChunkPos { x, z });
+                }
+            }
+            CLIENTBOUND_CHUNK_BATCH_FINISHED => {
+                let mut c = cursor;
+                let batch_size = read_varint(&packet, &mut c)?;
+                if c != packet.len() { return Err("trailing bytes in Chunk Batch Finished".into()); }
+                let mut response = Vec::with_capacity(5);
+                write_varint(&mut response, 0x0a); // Serverbound Chunk Batch Received
+                response.extend_from_slice(&7.0f32.to_be_bytes());
+                conn.write_packet(&response).map_err(|e| e.to_string())?;
+                println!("Chunk batch finished ({batch_size} chunks); acknowledged.");
             }
             CLIENTBOUND_PING => {
                 if packet.len() != cursor + 4 { return Err(format!("invalid Play Ping length: expected 4 bytes, got {}", packet.len().saturating_sub(cursor))); }
