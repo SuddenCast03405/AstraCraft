@@ -72,7 +72,7 @@ fn main() {
             println!("Protocol target: {}", session::PROTOCOL_VERSION);
             println!("Usage: astracraft ping <host:port>");
             println!("       astracraft login <host:port> <username>");
-            println!("Implemented: status ping, offline-mode login, zlib negotiation, configuration handshake, persistent Play loop, keep-alive/ping replies, Join Game decoding and teleport confirmation.");
+            println!("Implemented: status ping, offline-mode login, zlib negotiation, configuration handshake, persistent Play loop, keep-alive/ping replies, Join Game/Respawn decoding, chunk ingestion, and teleport confirmation.");
             println!("World model: sparse block sections, bounded loaded chunks, dimension bounds and synchronized player pose.");
             println!("Not yet implemented: online account authentication, lighting, entities, input, GUI and 3D rendering.");
         }
