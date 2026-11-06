@@ -89,6 +89,7 @@ fn play_loop(conn: &mut MinecraftConnection) -> Result<(), String> {
     let mut unknown_ids = std::collections::BTreeSet::new();
     let mut world: Option<crate::world::World> = None;
     let mut chunks_received = 0u64;
+    let mut player_loaded_sent = false;
     loop {
         let packet = conn.read_packet().map_err(|e| format!("Play state read failed after {received} packets: {e}"))?;
         let (id, cursor) = packet_id(&packet)?;
@@ -125,6 +126,10 @@ fn play_loop(conn: &mut MinecraftConnection) -> Result<(), String> {
             CLIENTBOUND_PLAYER_POSITION => {
                 let teleport = crate::play::decode_player_teleport(&packet[cursor..])?;
                 conn.write_packet(&crate::play::teleport_confirm_packet(teleport.teleport_id)).map_err(|e| e.to_string())?;
+                if !player_loaded_sent {
+                    conn.write_packet(&[0x2b]).map_err(|e| e.to_string())?; // Serverbound Player Loaded
+                    player_loaded_sent = true;
+                }
                 if let Some(active) = world.as_mut() {
                     let old = active.player;
                     let flags = teleport.relative_flags;
