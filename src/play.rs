@@ -6,7 +6,7 @@ use crate::world::{Chunk, ChunkPos, Dimension, SECTION_VOLUME};
 const MAX_CHUNK_DATA_BYTES: usize = 2 * 1024 * 1024;
 const MAX_PALETTE_ENTRIES: usize = 4096;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct DecodedChunk {
     pub chunk: Chunk,
     /// Number of bytes consumed from the packet payload (remaining bytes contain block entities/light).
@@ -229,6 +229,39 @@ pub fn teleport_confirm_packet(teleport_id: i32) -> Vec<u8> {
 mod tests {
     use super::*;
     use crate::protocol::{write_string, write_varint};
+
+    #[test]
+    fn decodes_single_value_chunk_section_and_heightmap_nbt() {
+        let dimension = crate::world::Dimension::new(-64, 16).unwrap();
+        let mut section = Vec::new();
+        section.extend_from_slice(&1i16.to_be_bytes()); // one non-air block
+        section.push(0); write_varint(&mut section, 5); write_varint(&mut section, 0); // block states
+        section.push(0); write_varint(&mut section, 1); write_varint(&mut section, 0); // biomes
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&(-2i32).to_be_bytes());
+        payload.extend_from_slice(&3i32.to_be_bytes());
+        payload.extend_from_slice(&[10, 0, 0, 0]); // empty root compound
+        write_varint(&mut payload, section.len() as i32);
+        payload.extend_from_slice(&section);
+        let decoded = decode_chunk_data(&payload, dimension).unwrap();
+        assert_eq!(decoded.chunk.pos, ChunkPos { x: -2, z: 3 });
+        assert_eq!(decoded.section_count, 1);
+        assert_eq!(decoded.chunk.block(crate::world::BlockPos { x: -32, y: -64, z: 48 }).unwrap(), 5);
+        assert_eq!(decoded.consumed, payload.len());
+    }
+
+    #[test]
+    fn rejects_malformed_chunk_palette_lengths() {
+        let mut section = Vec::new();
+        section.extend_from_slice(&0i16.to_be_bytes());
+        section.push(4); write_varint(&mut section, 1); write_varint(&mut section, 0);
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&[0; 8]);
+        payload.extend_from_slice(&[10, 0, 0, 0]);
+        write_varint(&mut payload, section.len() as i32);
+        payload.extend_from_slice(&section);
+        assert!(decode_chunk_data(&payload, crate::world::Dimension::new(0, 16).unwrap()).is_err());
+    }
 
     #[test]
     fn decodes_protocol_772_join_game() {
