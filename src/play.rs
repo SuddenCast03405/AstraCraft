@@ -240,8 +240,10 @@ mod tests {
         let dimension = crate::world::Dimension::new(-64, 16).unwrap();
         let mut section = Vec::new();
         section.extend_from_slice(&1i16.to_be_bytes()); // one non-air block
-        section.push(0); write_varint(&mut section, 5); write_varint(&mut section, 0); // block states
-        section.push(0); write_varint(&mut section, 1); write_varint(&mut section, 0); // biomes
+        section.push(4); write_varint(&mut section, 2); write_varint(&mut section, 0); write_varint(&mut section, 5);
+        write_varint(&mut section, 256); // 16 four-bit entries per packed long
+        for index in 0..256 { section.extend_from_slice(&(if index == 0 { 1u64 } else { 0u64 }).to_be_bytes()); }
+        section.push(0); write_varint(&mut section, 1); write_varint(&mut section, 0); // single biome
         let mut payload = Vec::new();
         payload.extend_from_slice(&(-2i32).to_be_bytes());
         payload.extend_from_slice(&3i32.to_be_bytes());
