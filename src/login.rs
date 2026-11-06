@@ -121,7 +121,10 @@ fn play_loop(conn: &mut MinecraftConnection) -> Result<(), String> {
                         crate::world::Dimension::new(-64, 384)
                     }
                 }.map_err(|e| e.to_string())?;
-                world = Some(crate::world::World::new(dimension));
+                let view = join.view_distance.clamp(2, 32) as usize;
+                let chunk_budget = ((view * 2 + 3).pow(2)).min(4096);
+                world = Some(crate::world::World::with_chunk_limit(dimension, chunk_budget));
+                println!("World chunk budget: {chunk_budget} resident chunks.");
             }
             CLIENTBOUND_PLAYER_POSITION => {
                 let teleport = crate::play::decode_player_teleport(&packet[cursor..])?;
